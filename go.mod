@@ -1,4 +1,4 @@
-module github.com/rohitverma1989/service
+module github.com/ardanlabs/service
 
 go 1.19
 
