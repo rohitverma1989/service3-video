@@ -1,4 +1,4 @@
-module github.com/rohitverma1989/service3-video
+module github.com/rohitverma1989/service
 
 go 1.19
 
