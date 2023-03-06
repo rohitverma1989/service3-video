@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 run:
-	go run main.go
+	go run app/services/sales-api/main.go | go run app/tooling/logfmt/main.go
 
 build:
 	go build -ldflags "-X main.build=local"
@@ -63,3 +63,7 @@ kind-update: all kind-load kind-restart
 
 kind-describe:
 	kubectl describe pod -l app=service
+
+tidy:
+	go mod tidy 
+	go mod vendor

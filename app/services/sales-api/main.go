@@ -1,12 +1,27 @@
 package main
 
 import (
+	"errors"
+	"expvar"
 	"fmt"
+	"net/http"
 	"os"
+	"os/signal"
+	"runtime"
+	"syscall"
+	"time"
 
+	"github.com/ardanlabs/conf"
+	"github.com/ardanlabs/service/app/services/sales-api/handlers"
+	"go.uber.org/automaxprocs/maxprocs"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+/*
+	Need to figure out timeouts for http service.
+	Look at pgx for database access and query execution.
+*/
 
 var build = "develop"
 
@@ -27,6 +42,72 @@ func main() {
 }
 
 func run(log *zap.SugaredLogger) error {
+	// =========================================================================
+	// GOMAXPROCS
+	opt := maxprocs.Logger(log.Infof)
+	if _, err := maxprocs.Set(opt); err != nil {
+		return fmt.Errorf("maxprocs: %w", err)
+	}
+	log.Infow("startup", "GOMAXPROCS", runtime.GOMAXPROCS(0))
+
+	// =========================================================================
+	// Configuration
+
+	cfg := struct {
+		conf.Version
+		Web struct {
+			ReadTimeout     time.Duration `conf:"default:5s"`
+			WriteTimeout    time.Duration `conf:"default:10s"`
+			IdleTimeout     time.Duration `conf:"default:120s"`
+			ShutdownTimeout time.Duration `conf:"default:20s"`
+			APIHost         string        `conf:"default:0.0.0.0:3000"`
+			DebugHost       string        `conf:"default:0.0.0.0:4000"`
+		}
+	}{
+		Version: conf.Version{
+			SVN:  build,
+			Desc: "copyright information here",
+		},
+	}
+
+	const prefix = "SALES"
+	help, err := conf.ParseOSArgs(prefix, &cfg)
+	if err != nil {
+		if errors.Is(err, conf.ErrHelpWanted) {
+			fmt.Println(help)
+			return nil
+		}
+		return fmt.Errorf("parsing config: %w", err)
+	}
+
+	// =========================================================================
+	// App Starting
+	log.Infow("starting service", "version", build)
+	defer log.Infow("shutdown complete")
+	out, err := conf.String(&cfg)
+	if err != nil {
+		return fmt.Errorf("generating config for output: %w", err)
+	}
+	log.Infow("startup", "config", out)
+	expvar.NewString("build").Set(build)
+
+	// =========================================================================
+	// Start Debug Service
+
+	log.Infow("startup", "status", "debug v1 router started", "host", cfg.Web.DebugHost)
+
+	debugMux := handlers.DebugStandardLibraryMux()
+	go func() {
+		if err := http.ListenAndServe(cfg.Web.DebugHost, debugMux); err != nil {
+			log.Errorw("shutdown", "status", "debug v1 router closed", "host", cfg.Web.DebugHost, "ERROR", err)
+		}
+	}()
+
+	// =========================================================================
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
+	<-shutdown
+
 	return nil
 }
 
@@ -37,16 +118,13 @@ func initLogger(service string, outputPaths ...string) (*zap.SugaredLogger, erro
 	config.InitialFields = map[string]any{
 		"service": service,
 	}
-
 	config.OutputPaths = []string{"stdout"}
 	if outputPaths != nil {
 		config.OutputPaths = outputPaths
 	}
-
 	log, err := config.Build(zap.WithCaller(true))
 	if err != nil {
 		return nil, err
 	}
-
 	return log.Sugar(), nil
 }
