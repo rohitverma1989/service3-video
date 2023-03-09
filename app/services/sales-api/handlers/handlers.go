@@ -45,10 +45,19 @@ type APIMuxConfig struct {
 
 // APIMux constructs a http.Handler with all application routes defined.
 func APIMux(cfg APIMuxConfig) *web.App {
+	// Make the app which hold all the routes
 	app := web.NewApp(cfg.Shutdown)
+
+	// Load the routes for different versions of api
+	v1(app, cfg)
+
+	return app
+}
+
+func v1(app *web.App, cfg APIMuxConfig) {
+	const version = "/v1"
 	tgh := testgrp.Handlers{
 		Log: cfg.Log,
 	}
-	app.Handle(http.MethodGet, "/v1/test", tgh.Test)
-	return app
+	app.Handle(http.MethodGet, version, "/test", tgh.Test)
 }
