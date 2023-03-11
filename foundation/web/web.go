@@ -18,12 +18,14 @@ type Handler func(ctx context.Context, w http.ResponseWriter, r *http.Request) e
 type App struct {
 	*httptreemux.ContextMux
 	shutdown chan os.Signal
+	mw       []Middleware
 }
 
-func NewApp(shutdown chan os.Signal) *App {
+func NewApp(shutdown chan os.Signal, mw ...Middleware) *App {
 	return &App{
 		ContextMux: httptreemux.NewContextMux(),
 		shutdown:   shutdown,
+		mw:         mw,
 	}
 }
 
@@ -31,11 +33,17 @@ func (a *App) SignalShutDown() {
 	a.shutdown <- syscall.SIGTERM
 }
 
-func (a *App) Handle(method string, group string, path string, handler Handler) {
-	// PRE CODE PROCESSING CAN BE IMPLEMENTED HERE
-	// <CODE FOR PRE PROCESSING>
+func (a *App) Handle(method string, group string, path string, handler Handler, mw ...Middleware) {
+	// First add the handler specific middlewares handlers
+	handler = wrapMiddleware(mw, handler)
 
+	// Secondly add the application specific middlewares handlers
+	handler = wrapMiddleware(a.mw, handler)
+
+	// Function to execute for each request
 	h := func(w http.ResponseWriter, r *http.Request) {
+
+		// Calling wrapped handler function
 		err := handler(r.Context(), w, r)
 		if err != nil {
 			// Error handling code
