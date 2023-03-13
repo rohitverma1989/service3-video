@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"os"
 	"syscall"
+	"time"
 
 	"github.com/dimfeld/httptreemux/v5"
+	"github.com/google/uuid"
 )
 
 type Handler func(ctx context.Context, w http.ResponseWriter, r *http.Request) error
@@ -42,11 +44,17 @@ func (a *App) Handle(method string, group string, path string, handler Handler, 
 
 	// Function to execute for each request
 	h := func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		v := Values{
+			TraceID: uuid.New().String(),
+			Now:     time.Now().UTC(),
+		}
 
-		// Calling wrapped handler function
-		err := handler(r.Context(), w, r)
-		if err != nil {
-			// Error handling code
+		ctx = context.WithValue(ctx, key, &v)
+
+		if err := handler(ctx, w, r); err != nil {
+			a.SignalShutDown()
+			return
 		}
 	}
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/ardanlabs/service/app/services/sales-api/handlers/debug/checkgrp"
 	"github.com/ardanlabs/service/app/services/sales-api/handlers/v1/testgrp"
+	"github.com/ardanlabs/service/bussiness/web/mid"
 	"github.com/ardanlabs/service/foundation/web"
 	"go.uber.org/zap"
 )
@@ -46,7 +47,7 @@ type APIMuxConfig struct {
 // APIMux constructs a http.Handler with all application routes defined.
 func APIMux(cfg APIMuxConfig) *web.App {
 	// Make the app which hold all the routes
-	app := web.NewApp(cfg.Shutdown)
+	app := web.NewApp(cfg.Shutdown, mid.Logger(cfg.Log))
 
 	// Load the routes for different versions of api
 	v1(app, cfg)
